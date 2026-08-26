@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "./components/ConfirmDialog";
-import { MailIcon, PlugIcon, RefreshIcon, SearchIcon } from "./components/Icons";
+import { PineTreeIcon, PlugIcon, RefreshIcon, SearchIcon } from "./components/Icons";
 import { MessageList } from "./components/MessageList";
 import { MessageView } from "./components/MessageView";
 import { SetupPanel } from "./components/SetupPanel";
@@ -35,7 +35,7 @@ export default function App() {
       <header className="flex items-center gap-3 border-b border-zinc-800/80 bg-zinc-950/95 px-4 py-3 backdrop-blur-xl">
         <div className="flex items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm shadow-indigo-950/50">
-            <MailIcon width={15} height={15} />
+            <PineTreeIcon width={15} height={15} />
           </div>
           <h1 className="text-sm font-semibold tracking-tight text-zinc-100">Pine Mail</h1>
         </div>

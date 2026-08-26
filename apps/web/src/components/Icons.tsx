@@ -25,6 +25,18 @@ export function MailIcon(props: IconProps) {
   );
 }
 
+// Pine Mail's brand mark: a filled pine tree, used in the header logo square.
+export function PineTreeIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <polygon points="12,2.5 16,9 8,9" />
+      <polygon points="12,6.5 17.5,13.5 6.5,13.5" />
+      <polygon points="12,11 19.5,19.5 4.5,19.5" />
+      <rect x="10.5" y="19.5" width="3" height="2.5" rx="0.5" />
+    </svg>
+  );
+}
+
 export function SearchIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

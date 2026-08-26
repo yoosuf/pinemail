@@ -33,6 +33,14 @@ agent-facing API (`/api/wait`, `/api/messages/:id/extract`, MCP tools).
 
 ## Quick start (Docker)
 
+Pull the published multi-arch image (`linux/amd64` + `linux/arm64`) straight from Docker Hub:
+
+```bash
+docker run -d --name pinemail -p 1025:1025 -p 8025:8025 -v pinemail-data:/data yoosuf/pinemail:latest
+```
+
+Or build and run it locally from source:
+
 ```bash
 docker compose up --build
 ```
@@ -43,6 +51,8 @@ To also run the MCP server against it:
 ```bash
 docker compose --profile mcp run --rm mcp
 ```
+
+**Docker Hub:** [`yoosuf/pinemail`](https://hub.docker.com/r/yoosuf/pinemail) — tags `latest` and `0.1.0`.
 
 ## Configuration (env vars)
 

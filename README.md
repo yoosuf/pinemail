@@ -2,6 +2,8 @@
 
 A tiny, single-binary SMTP mail catcher for development environments — like Mailtrap or Mailpit, but written in Rust with a minimal footprint, structured as a monorepo, and built for agentic development: AI agents (and e2e tests) can discover, wait for, and extract data from captured emails via a REST API or an MCP server.
 
+**Tags:** `mail` • `SMTP` • `mail-catcher` • `testing` • `e2e` • `agents` • `MCP` • `Docker` • `Rust` • `email` • `development`
+
 ## Monorepo layout
 
 ```

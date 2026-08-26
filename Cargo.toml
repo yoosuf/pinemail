@@ -6,6 +6,7 @@ members = ["crates/core", "crates/server", "crates/mcp"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+repository = "https://github.com/yoosuf/pinemail"
 
 [profile.release]
 opt-level = "z"

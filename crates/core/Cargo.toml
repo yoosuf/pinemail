@@ -3,7 +3,9 @@ name = "pinemail-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Shared storage, mail-parsing and config for Pine Mail"
+description = "Shared storage, mail-parsing, signal extraction, and config for Pine Mail — an SMTP mail catcher for development and testing"
+repository = "https://github.com/yoosuf/pinemail"
+keywords = ["mail", "smtp", "mail-catcher", "testing", "email"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

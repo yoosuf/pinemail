@@ -1,0 +1,8 @@
+target/
+apps/web/node_modules/
+apps/web/dist/
+.git/
+*.db
+*.db-*
+Dockerfile
+docker-compose.yml

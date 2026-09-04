@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>pinemail</id>
+    <version>0.1.0</version>
+    <packageSourceUrl>https://github.com/yoosuf/pinemail</packageSourceUrl>
+    <owners>Yoosuf</owners>
+    <title>Pine Mail</title>
+    <authors>Yoosuf</authors>
+    <projectUrl>https://github.com/yoosuf/pinemail</projectUrl>
+    <licenseUrl>https://github.com/yoosuf/pinemail/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/yoosuf/pinemail</projectSourceUrl>
+    <docsUrl>https://github.com/yoosuf/pinemail#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/yoosuf/pinemail/issues</bugTrackerUrl>
+    <tags>pinemail smtp sms mailtrap mailpit testing e2e mcp AI rust</tags>
+    <summary>Tiny single-binary SMTP &amp; SMS catcher for development environments and AI agents</summary>
+    <description>
+      Pine Mail is a tiny, single-binary SMTP &amp; SMS catcher for local development environments — like Mailtrap or Mailpit, but written in Rust with a minimal footprint, structured as a monorepo, and built for agentic development.
+    </description>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

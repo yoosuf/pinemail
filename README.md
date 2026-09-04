@@ -36,7 +36,103 @@ For runtime integration details for AI agents and test suites, see [AGENTS.md](A
 
 ---
 
-## Quick Start (Docker)
+## Installation & Distribution Methods
+
+Pine Mail provides official distribution packages and single static binaries for **macOS**, **Linux**, and **Windows**.
+
+### 🍺 Homebrew (macOS & Linux)
+
+Install Pine Mail (both `pinemail` server and `pinemail-mcp` agent tool) via Homebrew:
+
+```bash
+brew tap yoosuf/pinemail
+brew install pinemail
+```
+
+**Run as a background service (macOS):**
+```bash
+brew services start pinemail
+```
+
+---
+
+### ⚡ Automated One-Liner Installers
+
+Auto-detects OS and CPU architecture, downloads the latest binary release, and places executables in PATH.
+
+**macOS & Linux (POSIX Shell):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/yoosuf/pinemail/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/yoosuf/pinemail/main/install.ps1 | iex
+```
+
+---
+
+### 🐧 Linux Native Packages
+
+- **Debian / Ubuntu (`.deb`)**:
+  ```bash
+  curl -LO https://github.com/yoosuf/pinemail/releases/latest/download/pinemail_amd64.deb
+  sudo dpkg -i pinemail_amd64.deb
+  ```
+- **Fedora / RHEL / CentOS (`.rpm`)**:
+  ```bash
+  sudo rpm -i https://github.com/yoosuf/pinemail/releases/latest/download/pinemail.x86_64.rpm
+  ```
+- **Arch Linux (AUR)**:
+  ```bash
+  yay -S pinemail-bin
+  ```
+
+---
+
+### 🪟 Windows Package Managers
+
+- **Scoop**:
+  ```powershell
+  scoop bucket add pinemail https://github.com/yoosuf/scoop-bucket
+  scoop install pinemail
+  ```
+- **Winget (Windows Package Manager)**:
+  ```cmd
+  winget install PineMail.PineMail
+  ```
+- **Chocolatey**:
+  ```cmd
+  choco install pinemail
+  ```
+
+---
+
+### 📦 Pre-Compiled GitHub Release Binaries
+
+Download standalone pre-built binaries from [GitHub Releases](https://github.com/yoosuf/pinemail/releases/latest):
+
+| Operating System | Architecture | Package File |
+|---|---|---|
+| **macOS** | Apple Silicon (`aarch64`) | `pinemail-v*-aarch64-apple-darwin.tar.gz` |
+| **macOS** | Intel (`x86_64`) | `pinemail-v*-x86_64-apple-darwin.tar.gz` |
+| **Linux** | x86_64 | `pinemail-v*-x86_64-unknown-linux-gnu.tar.gz` |
+| **Linux** | ARM64 (`aarch64`) | `pinemail-v*-aarch64-unknown-linux-gnu.tar.gz` |
+| **Windows** | x86_64 | `pinemail-v*-x86_64-pc-windows-msvc.zip` |
+
+---
+
+### 🦀 Cargo (Rust Workspace)
+
+Install directly via `cargo`:
+
+```bash
+cargo install --git https://github.com/yoosuf/pinemail pinemail-server pinemail-mcp
+```
+
+---
+
+### 🐳 Docker & Docker Compose
 
 Pull the published multi-arch image (`linux/amd64` + `linux/arm64`) from Docker Hub:
 
@@ -44,13 +140,11 @@ Pull the published multi-arch image (`linux/amd64` + `linux/arm64`) from Docker 
 docker run -d --name pinemail -p 1025:1025 -p 8025:8025 -v pinemail-data:/data yoosuf/pinemail:latest
 ```
 
-Or build and run it locally from source:
+Or run via Docker Compose:
 
 ```bash
 docker compose up --build
 ```
-
-Then point your application's SMTP client at `localhost:1025` and open the Web UI at `http://localhost:8025`.
 
 To run the MCP server against it:
 

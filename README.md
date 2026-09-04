@@ -57,7 +57,7 @@ Pine Mail provides official distribution packages and single static binaries for
 
 ### 🍺 Homebrew (macOS & Linux)
 
-Install Pine Mail (both `pinemail` server binary and `pinemail-mcp` AI agent tool) via Homebrew:
+Install Pine Mail (both `pinemail` server binary and `pinemail-mcp` AI agent tool) via Homebrew from [`yoosuf/homebrew-tap`](https://github.com/yoosuf/homebrew-tap):
 
 ```bash
 # Add the Homebrew tap and install

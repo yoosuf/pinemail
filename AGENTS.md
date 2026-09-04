@@ -41,7 +41,7 @@ cargo run -p pinemail-server     # http://localhost:8025, smtp on :1025
 cargo run -p pinemail-mcp        # reads PINEMAIL_URL, talks JSON-RPC over stdio
 
 # Install pre-built binaries (macOS, Linux, Windows)
-# Homebrew: brew tap yoosuf/pinemail && brew install pinemail
+# Homebrew: brew tap yoosuf/tap && brew install pinemail
 # POSIX Shell: curl -fsSL https://raw.githubusercontent.com/yoosuf/pinemail/main/install.sh | sh
 # Windows PowerShell: iwr -useb https://raw.githubusercontent.com/yoosuf/pinemail/main/install.ps1 | iex
 

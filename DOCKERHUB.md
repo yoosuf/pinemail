@@ -110,7 +110,7 @@ docker run --rm -i -e PINEMAIL_URL=http://host.docker.internal:8025 \
 ### Alternative Installation Methods
 
 Prefer native host binaries without Docker?
-- **Homebrew (macOS & Linux)**: `brew tap yoosuf/pinemail && brew install pinemail`
+- **Homebrew (macOS & Linux)**: `brew tap yoosuf/tap && brew install pinemail` (or `brew install yoosuf/tap/pinemail`)
 - **POSIX Shell Installer**: `curl -fsSL https://raw.githubusercontent.com/yoosuf/pinemail/main/install.sh | sh`
 - **Windows PowerShell**: `iwr -useb https://raw.githubusercontent.com/yoosuf/pinemail/main/install.ps1 | iex`
 - **Native Packages**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL), Arch Linux (AUR `pinemail-bin`), Scoop, Winget, and Chocolatey.

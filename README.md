@@ -20,17 +20,32 @@ For runtime integration details for AI agents and test suites, see [AGENTS.md](A
 
 ---
 
+## Feature Comparison
+
+| Feature | Pine Mail 🌲 | Mailhog | Mailpit | Mailtrap (SaaS) |
+|---|---|---|---|---|
+| Single Static Binary | ✅ (Rust, ~15MB) | ❌ (Go + deps) | ✅ (Go) | ❌ (Cloud SaaS only) |
+| **Dual Email & SMS Catcher** | ✅ **Built-in** | ❌ Email only | ❌ Email only | 🟡 Partial |
+| **Twilio Webhook Ingestion** | ✅ **Built-in** | ❌ | ❌ | ❌ |
+| **Auto Signal Extraction (OTP / Links)** | ✅ **Built-in** | ❌ | ❌ | ❌ |
+| **Long-Polling Wait API (`/api/wait` & `/api/sms/wait`)** | ✅ **Built-in** | ❌ | 🟡 Partial | ❌ |
+| **Litmus-Style Email Analysis** | ✅ **Built-in** | ❌ | ❌ | ❌ |
+| **14 MCP Tools for AI Agents** | ✅ **Built-in** | ❌ | ❌ | ❌ |
+| Free & Open Source | ✅ MIT | ✅ | ✅ | ❌ |
+
+---
+
 ## Key Features
 
 - **SMTP Email Catcher (`:1025`)**: dead-end local SMTP listener (no auth, no relaying, no external network calls).
-- **SMS Catcher & Twilio Webhook Support (`:8025`)**: ingest SMS via standard JSON or Twilio webhooks (`POST /api/sms` and `POST /api/sms/webhook`).
-- **Web UI & REST API (`:8025`)**: dual-tab React interface for Emails & SMS with live updates over WebSockets.
+- **SMS Catcher & Twilio Webhook Support (`:8025`)**: ingest SMS via standard JSON (`POST /api/sms`) or Twilio webhooks (`POST /api/sms/webhook` with `x-www-form-urlencoded` payloads).
+- **Dual-Tab Web UI & REST API (`:8025`)**: clean React interface for viewing both Emails and SMS messages with live WebSocket updates.
 - **Rich Message Inspection**: view HTML/plain-text bodies, raw headers, download attachments or raw `.eml` files.
 - **Litmus-Style Email Analysis**: `GET /api/messages/:id/analysis` checks 11 HTML email-client compatibility factors (DOCTYPE, tables, inline CSS, fonts, image alt, size clipping) and provides a SpamAssassin-style heuristic spam score.
 - **Search, Pagination & Bulk Actions**: multi-select grid with bulk mark read/unread, bulk delete, and paginated lazy-loading (50 items per page).
 - **Agentic Long-Polling**: `GET /api/wait` and `GET /api/sms/wait` long-poll server-side for incoming emails or SMS matching filters (`to`, `from`, `subject`, `body`, `since`).
-- **Signal Extraction Engine**: `GET /api/messages/:id/extract` and `GET /api/sms/:id/extract` automatically pull OTP codes (4-8 digits) and magic links out of captured messages.
-- **14 MCP Agent Tools (`pinemail-mcp`)**: built-in Model Context Protocol stdio server exposing email & SMS discovery tools directly to Claude Desktop, Copilot, Cursor, and custom agents.
+- **Signal Extraction Engine**: `GET /api/messages/:id/extract` and `GET /api/sms/:id/extract` automatically pull OTP codes (4–8 digits) and magic links out of captured emails and SMS bodies.
+- **14 MCP Agent Tools (`pinemail-mcp`)**: Model Context Protocol stdio server exposing 7 Email tools and 7 SMS tools directly to Claude Desktop, Copilot, Cursor, and autonomous test runners.
 - **SQLite Storage**: persistent SQLite storage (`/data/pinemail.db` or `:memory:`) with automatic FIFO pruning past `MAX_MESSAGES`.
 - **Zero External Runtime Dependencies**: single binary with embedded frontend built via `rust-embed`.
 
@@ -188,6 +203,69 @@ Content-Type: application/x-www-form-urlencoded
 
 From=%2B15550199&To=%2B15550100&Body=Your+verification+code+is+839201
 ```
+
+---
+
+## REST API Directory
+
+### Email Endpoints (`/api/messages`)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/messages` | List captured emails (`search`, `limit`, `offset`) |
+| `GET` | `/api/messages/:id` | Fetch full email details (headers, text/html, attachments) |
+| `GET` | `/api/messages/:id/raw` | Download raw MIME file (`.eml`) |
+| `GET` | `/api/messages/:id/html` | Render raw HTML body |
+| `GET` | `/api/messages/:id/attachments/:index` | Download attachment by index |
+| `GET` | `/api/messages/:id/extract` | Extract OTP codes (4-8 digits) and HTTP/HTTPS links |
+| `GET` | `/api/messages/:id/analysis` | HTML email compatibility checks & heuristic spam score |
+| `GET` | `/api/wait` | Server-side long-polling wait (`to`, `from`, `subject`, `since`, `timeout_ms`) |
+| `PATCH` | `/api/messages/:id/read` | Toggle read/unread state |
+| `DELETE` | `/api/messages/:id` | Delete email by ID |
+| `POST` | `/api/messages/bulk-delete` | Bulk delete emails by ID list |
+| `PATCH` | `/api/messages/bulk-read` | Bulk update read state |
+| `DELETE` | `/api/messages` | Clear all emails |
+| `POST` | `/api/test-email` | Inject synthetic test email |
+
+### SMS Endpoints (`/api/sms`)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/sms` | List captured SMS messages (`search`, `limit`, `offset`) |
+| `GET` | `/api/sms/:id` | Fetch single SMS details |
+| `POST` | `/api/sms` | Ingest SMS via JSON payload |
+| `POST` | `/api/sms/webhook` | Ingest SMS via Twilio form-urlencoded or JSON webhook |
+| `GET` | `/api/sms/wait` | Server-side long-polling wait for SMS (`to`, `from`, `body`, `since`, `timeout_ms`) |
+| `GET` | `/api/sms/:id/extract` | Extract OTP codes (4-8 digits) and HTTP/HTTPS links from SMS |
+| `PATCH` | `/api/sms/:id/read` | Toggle read/unread state |
+| `DELETE` | `/api/sms/:id` | Delete SMS by ID |
+| `POST` | `/api/sms/bulk-delete` | Bulk delete SMS by ID list |
+| `PATCH` | `/api/sms/bulk-read` | Bulk update SMS read state |
+| `DELETE` | `/api/sms` | Clear all SMS messages |
+| `POST` | `/api/test-sms` | Inject synthetic test SMS message |
+
+---
+
+## Model Context Protocol (MCP) Server (`pinemail-mcp`)
+
+Pine Mail includes 14 built-in MCP tools for AI agents (Claude Desktop, Copilot, Cursor, agentic E2E tests):
+
+| Category | Tool Name | Parameters | Description |
+|---|---|---|---|
+| **Email Tools** | `list_emails` | `search?`, `limit?`, `offset?` | Query emails with search filter and pagination |
+| | `get_email` | `id` | Get email headers, text/html content, and attachment metadata |
+| | `wait_for_email` | `to?`, `from?`, `subject?`, `since_ms?`, `timeout_ms?` | Long-poll server-side until matching email arrives |
+| | `extract_signals` | `id` | Automatically extract OTP codes and links from email |
+| | `send_test_email` | `to?` | Inject synthetic test email |
+| | `delete_email` | `id` | Delete email by ID |
+| | `clear_inbox` | *none* | Clear all emails |
+| **SMS Tools** | `list_sms` | `search?`, `limit?`, `offset?` | Query captured SMS with search filter and pagination |
+| | `get_sms` | `id` | Get single SMS details |
+| | `wait_for_sms` | `to?`, `from?`, `body?`, `since_ms?`, `timeout_ms?` | Long-poll server-side until matching SMS arrives |
+| | `extract_sms_signals` | `id` | Automatically extract OTP codes and links from SMS body |
+| | `send_test_sms` | `to?`, `from?`, `body?` | Inject synthetic test SMS |
+| | `delete_sms` | `id` | Delete SMS by ID |
+| | `clear_sms_inbox` | *none* | Clear all SMS messages |
 
 ---
 

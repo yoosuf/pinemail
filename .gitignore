@@ -2,6 +2,7 @@
 /target/
 
 # Node.js & Frontend build artifacts
+/dist/
 node_modules/
 apps/web/node_modules/
 apps/web/dist/

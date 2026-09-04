@@ -115,6 +115,20 @@ Agents driving end-to-end tests (e.g. signup flows, password resets, SMS 2FA log
 6. Optionally clean up with DELETE /api/messages/{id} or DELETE /api/sms/{id}
 ```
 
+#### Node.js Implementation Pattern
+```javascript
+const since = new Date().toISOString();
+await triggerSignupOrAuthAction();
+
+// Long-poll server-side until Email or SMS arrives
+const waitRes = await fetch(`http://localhost:8025/api/sms/wait?to=${encodeURIComponent(phone)}&since=${since}`);
+const item = await waitRes.json();
+
+// Extract OTP code or magic link
+const extRes = await fetch(`http://localhost:8025/api/sms/${item.id}/extract`);
+const { codes, links } = await extRes.json();
+```
+
 > [!CAUTION]
 > **Gotcha: Timestamp `since` parameter**: `since` defaults to "now" *at the moment the wait endpoint is called*. If your test triggers the action first and calls `/api/wait` second, an email/SMS received in that microsecond gap will have `received_at < since` and be filtered out. Always capture `since` timestamp **prior** to triggering the sending action.
 
@@ -144,14 +158,18 @@ Point your MCP client (Claude Desktop, Copilot, Cursor) at `pinemail-mcp` (stdio
 - `delete_sms`: `{ id: string }`
 - `clear_sms_inbox`: `{}`
 
-#### Runnable E2E Demo Script
+#### Runnable E2E Demo Scripts
 
-`examples/mcp_e2e_demo.py` demonstrates launching `pinemail-mcp` over stdio and running a complete test sequence:
+- **Python (MCP stdio agent flow)**: `examples/mcp_e2e_demo.py` demonstrates launching `pinemail-mcp` over stdio and running a complete test sequence:
+  ```bash
+  cargo build --release -p pinemail-mcp
+  PINEMAIL_URL=http://127.0.0.1:8025 python3 examples/mcp_e2e_demo.py target/release/pinemail-mcp
+  ```
 
-```bash
-cargo build --release -p pinemail-mcp
-PINEMAIL_URL=http://127.0.0.1:8025 python3 examples/mcp_e2e_demo.py target/release/pinemail-mcp
-```
+- **Node.js (REST API long-polling flow)**: `examples/node_e2e_demo.js` demonstrates long-polling, signal extraction, and cleanup for Email & SMS using native Node 18+ `fetch`:
+  ```bash
+  PINEMAIL_URL=http://127.0.0.1:8025 node examples/node_e2e_demo.js
+  ```
 
 #### Client Configuration Snippet
 

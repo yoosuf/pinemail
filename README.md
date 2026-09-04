@@ -215,6 +215,33 @@ Content-Type: application/x-www-form-urlencoded
 From=%2B15550199&To=%2B15550100&Body=Your+verification+code+is+839201
 ```
 
+### Node.js (E2E Test Automation)
+
+Using Node 18+ native `fetch` to wait for messages and extract OTP verification codes:
+
+```javascript
+// 1. Capture ISO timestamp BEFORE triggering signup / SMS 2FA action
+const since = new Date().toISOString();
+const userPhone = "+15550199";
+
+// 2. Trigger your application action (e.g. request 2FA SMS code)
+await triggerSmsCodeAction({ to: userPhone });
+
+// 3. Long-poll Pine Mail server-side until SMS arrives (blocks up to timeout_ms)
+const waitRes = await fetch(
+  `http://localhost:8025/api/sms/wait?to=${encodeURIComponent(userPhone)}&since=${since}&timeout_ms=10000`
+);
+const sms = await waitRes.json();
+
+// 4. Extract 4-8 digit OTP verification code
+const extractRes = await fetch(`http://localhost:8025/api/sms/${sms.id}/extract`);
+const { codes } = await extractRes.json();
+const otpCode = codes[0]; // e.g. "839201"
+
+// 5. Submit extracted OTP code into your test runner / app
+await submitOtpCode(otpCode);
+```
+
 ---
 
 ## REST API Directory

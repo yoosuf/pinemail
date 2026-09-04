@@ -59,6 +59,21 @@ curl "http://localhost:8025/api/sms/<SMS_ID>/extract"
 # -> { "codes": ["839201"], "links": [] }
 ```
 
+### Node.js E2E Test Example
+```javascript
+// Record timestamp BEFORE triggering your app action
+const since = new Date().toISOString();
+await triggerSignupOrSmsAction();
+
+// Long-poll server until matching SMS or Email arrives
+const res = await fetch(`http://localhost:8025/api/sms/wait?to=%2B15550100&since=${since}`);
+const sms = await res.json();
+
+// Extract OTP verification codes automatically
+const ext = await fetch(`http://localhost:8025/api/sms/${sms.id}/extract`);
+const { codes } = await ext.json(); // ["839201"]
+```
+
 Or plug the bundled `pinemail-mcp` stdio server straight into Claude Desktop, Copilot, or Cursor to give your AI agent 14 built-in tools (`list_emails`, `get_email`, `wait_for_email`, `extract_signals`, `delete_email`, `clear_inbox`, `send_test_email`, `list_sms`, `get_sms`, `wait_for_sms`, `extract_sms_signals`, `send_test_sms`, `delete_sms`, `clear_sms_inbox`).
 
 ---

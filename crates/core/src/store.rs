@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::models::MessageSummary;
+use crate::models::{MessageSummary, SmsMessage};
 
 pub struct Store {
     conn: Mutex<Connection>,
@@ -17,6 +17,13 @@ pub struct NewMessage {
     pub subject: String,
     pub size: i64,
     pub raw: Vec<u8>,
+}
+
+pub struct NewSms {
+    pub id: String,
+    pub from: String,
+    pub to: String,
+    pub body: String,
 }
 
 impl Store {
@@ -33,10 +40,24 @@ impl Store {
                 size INTEGER NOT NULL,
                 received_at TEXT NOT NULL,
                 read INTEGER NOT NULL DEFAULT 0,
+                has_html INTEGER NOT NULL DEFAULT 0,
+                has_attachments INTEGER NOT NULL DEFAULT 0,
                 raw BLOB NOT NULL
              );
-             CREATE INDEX IF NOT EXISTS idx_messages_received_at ON messages(received_at);",
+             CREATE INDEX IF NOT EXISTS idx_messages_received_at ON messages(received_at);
+             CREATE TABLE IF NOT EXISTS sms (
+                id TEXT PRIMARY KEY,
+                from_phone TEXT NOT NULL,
+                to_phone TEXT NOT NULL,
+                body TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                read INTEGER NOT NULL DEFAULT 0
+             );
+             CREATE INDEX IF NOT EXISTS idx_sms_received_at ON sms(received_at);",
         )?;
+        let _ = conn.execute("ALTER TABLE messages ADD COLUMN has_html INTEGER NOT NULL DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE messages ADD COLUMN has_attachments INTEGER NOT NULL DEFAULT 0", []);
+
         Ok(Self {
             conn: Mutex::new(conn),
             max_messages,
@@ -47,10 +68,22 @@ impl Store {
         let conn = self.conn.lock().unwrap();
         let received_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let to_json = serde_json::to_string(&msg.to)?;
+        let (has_html, has_attachments) = crate::mail::body_flags(&msg.raw);
+
         conn.execute(
-            "INSERT INTO messages (id, from_addr, to_addrs, subject, size, received_at, read, raw)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7)",
-            params![msg.id, msg.from, to_json, msg.subject, msg.size, received_at, msg.raw],
+            "INSERT INTO messages (id, from_addr, to_addrs, subject, size, received_at, read, has_html, has_attachments, raw)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8, ?9)",
+            params![
+                msg.id,
+                msg.from,
+                to_json,
+                msg.subject,
+                msg.size,
+                received_at,
+                has_html as i64,
+                has_attachments as i64,
+                msg.raw
+            ],
         )?;
 
         if self.max_messages > 0 {
@@ -61,8 +94,6 @@ impl Store {
                 params![self.max_messages as i64],
             )?;
         }
-
-        let (has_html, has_attachments) = crate::mail::body_flags(&msg.raw);
 
         Ok(MessageSummary {
             id: msg.id,
@@ -93,14 +124,14 @@ impl Store {
 
         let mut stmt = if like.is_some() {
             conn.prepare(
-                "SELECT id, from_addr, to_addrs, subject, size, received_at, read, raw
+                "SELECT id, from_addr, to_addrs, subject, size, received_at, read, has_html, has_attachments
                  FROM messages
                  WHERE from_addr LIKE ?1 OR to_addrs LIKE ?1 OR subject LIKE ?1
                  ORDER BY received_at DESC LIMIT ?2 OFFSET ?3",
             )?
         } else {
             conn.prepare(
-                "SELECT id, from_addr, to_addrs, subject, size, received_at, read, raw
+                "SELECT id, from_addr, to_addrs, subject, size, received_at, read, has_html, has_attachments
                  FROM messages ORDER BY received_at DESC LIMIT ?2 OFFSET ?3",
             )?
         };
@@ -109,30 +140,22 @@ impl Store {
         let pattern = like.as_ref().unwrap_or(&dummy);
         let rows = stmt.query_map(params![pattern, limit, offset], |row| {
             let to_json: String = row.get(2)?;
-            let raw: Vec<u8> = row.get(7)?;
-            Ok((
-                MessageSummary {
-                    id: row.get(0)?,
-                    from: row.get(1)?,
-                    to: serde_json::from_str(&to_json).unwrap_or_default(),
-                    subject: row.get(3)?,
-                    size: row.get(4)?,
-                    received_at: row.get(5)?,
-                    read: row.get::<_, i64>(6)? != 0,
-                    has_html: false,
-                    has_attachments: false,
-                },
-                raw,
-            ))
+            Ok(MessageSummary {
+                id: row.get(0)?,
+                from: row.get(1)?,
+                to: serde_json::from_str(&to_json).unwrap_or_default(),
+                subject: row.get(3)?,
+                size: row.get(4)?,
+                received_at: row.get(5)?,
+                read: row.get::<_, i64>(6)? != 0,
+                has_html: row.get::<_, i64>(7)? != 0,
+                has_attachments: row.get::<_, i64>(8)? != 0,
+            })
         })?;
 
         let mut messages = Vec::new();
         for row in rows {
-            let (mut summary, raw) = row?;
-            let (has_html, has_attachments) = crate::mail::body_flags(&raw);
-            summary.has_html = has_html;
-            summary.has_attachments = has_attachments;
-            messages.push(summary);
+            messages.push(row?);
         }
 
         Ok((messages, total))
@@ -174,7 +197,7 @@ impl Store {
             format!("WHERE {}", clauses.join(" AND "))
         };
         let sql = format!(
-            "SELECT id, from_addr, to_addrs, subject, size, received_at, read, raw
+            "SELECT id, from_addr, to_addrs, subject, size, received_at, read, has_html, has_attachments
              FROM messages {where_clause} ORDER BY received_at ASC LIMIT 1"
         );
 
@@ -183,30 +206,21 @@ impl Store {
         let row = stmt
             .query_row(params.as_slice(), |row| {
                 let to_json: String = row.get(2)?;
-                let raw: Vec<u8> = row.get(7)?;
-                Ok((
-                    MessageSummary {
-                        id: row.get(0)?,
-                        from: row.get(1)?,
-                        to: serde_json::from_str(&to_json).unwrap_or_default(),
-                        subject: row.get(3)?,
-                        size: row.get(4)?,
-                        received_at: row.get(5)?,
-                        read: row.get::<_, i64>(6)? != 0,
-                        has_html: false,
-                        has_attachments: false,
-                    },
-                    raw,
-                ))
+                Ok(MessageSummary {
+                    id: row.get(0)?,
+                    from: row.get(1)?,
+                    to: serde_json::from_str(&to_json).unwrap_or_default(),
+                    subject: row.get(3)?,
+                    size: row.get(4)?,
+                    received_at: row.get(5)?,
+                    read: row.get::<_, i64>(6)? != 0,
+                    has_html: row.get::<_, i64>(7)? != 0,
+                    has_attachments: row.get::<_, i64>(8)? != 0,
+                })
             })
             .optional()?;
 
-        Ok(row.map(|(mut summary, raw)| {
-            let (has_html, has_attachments) = crate::mail::body_flags(&raw);
-            summary.has_html = has_html;
-            summary.has_attachments = has_attachments;
-            summary
-        }))
+        Ok(row)
     }
 
     pub fn get_raw(&self, id: &str) -> Result<Option<Vec<u8>>> {
@@ -219,28 +233,26 @@ impl Store {
 
     pub fn get_summary(&self, id: &str) -> Result<Option<MessageSummary>> {
         let conn = self.conn.lock().unwrap();
-        let row: Option<(String, String, String, i64, String, i64, Vec<u8>)> = conn
+        let row: Option<(String, String, String, i64, String, i64, i64, i64)> = conn
             .query_row(
-                "SELECT from_addr, to_addrs, subject, size, received_at, read, raw FROM messages WHERE id = ?1",
+                "SELECT from_addr, to_addrs, subject, size, received_at, read, has_html, has_attachments FROM messages WHERE id = ?1",
                 params![id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)),
             )
             .optional()?;
-        Ok(row.map(|(from, to_json, subject, size, received_at, read, raw)| {
-            let (has_html, has_attachments) = crate::mail::body_flags(&raw);
-            MessageSummary {
-                id: id.to_string(),
-                from,
-                to: serde_json::from_str(&to_json).unwrap_or_default(),
-                subject,
-                size,
-                received_at,
-                read: read != 0,
-                has_html,
-                has_attachments,
-            }
+        Ok(row.map(|(from, to_json, subject, size, received_at, read, has_html, has_attachments)| MessageSummary {
+            id: id.to_string(),
+            from,
+            to: serde_json::from_str(&to_json).unwrap_or_default(),
+            subject,
+            size,
+            received_at,
+            read: read != 0,
+            has_html: has_html != 0,
+            has_attachments: has_attachments != 0,
         }))
     }
+
 
     pub fn mark_read(&self, id: &str, read: bool) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
@@ -292,7 +304,210 @@ impl Store {
         conn.execute("DELETE FROM messages", [])?;
         Ok(())
     }
+
+    // --- SMS Operations ---
+
+    pub fn insert_sms(&self, sms: NewSms) -> Result<SmsMessage> {
+        let conn = self.conn.lock().unwrap();
+        let received_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        conn.execute(
+            "INSERT INTO sms (id, from_phone, to_phone, body, received_at, read)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+            params![sms.id, sms.from, sms.to, sms.body, received_at],
+        )?;
+
+        if self.max_messages > 0 {
+            conn.execute(
+                "DELETE FROM sms WHERE id IN (
+                    SELECT id FROM sms ORDER BY received_at DESC LIMIT -1 OFFSET ?1
+                )",
+                params![self.max_messages as i64],
+            )?;
+        }
+
+        Ok(SmsMessage {
+            id: sms.id,
+            from: sms.from,
+            to: sms.to,
+            body: sms.body,
+            received_at,
+            read: false,
+        })
+    }
+
+    pub fn list_sms(&self, search: Option<&str>, limit: i64, offset: i64) -> Result<(Vec<SmsMessage>, i64)> {
+        let conn = self.conn.lock().unwrap();
+        let like = search.map(|s| format!("%{}%", s));
+
+        let total: i64 = if let Some(ref pattern) = like {
+            conn.query_row(
+                "SELECT COUNT(*) FROM sms WHERE from_phone LIKE ?1 OR to_phone LIKE ?1 OR body LIKE ?1",
+                params![pattern],
+                |r| r.get(0),
+            )?
+        } else {
+            conn.query_row("SELECT COUNT(*) FROM sms", [], |r| r.get(0))?
+        };
+
+        let mut stmt = if like.is_some() {
+            conn.prepare(
+                "SELECT id, from_phone, to_phone, body, received_at, read
+                 FROM sms
+                 WHERE from_phone LIKE ?1 OR to_phone LIKE ?1 OR body LIKE ?1
+                 ORDER BY received_at DESC LIMIT ?2 OFFSET ?3",
+            )?
+        } else {
+            conn.prepare(
+                "SELECT id, from_phone, to_phone, body, received_at, read
+                 FROM sms ORDER BY received_at DESC LIMIT ?2 OFFSET ?3",
+            )?
+        };
+
+        let dummy = "%".to_string();
+        let pattern = like.as_ref().unwrap_or(&dummy);
+        let rows = stmt.query_map(params![pattern, limit, offset], |row| {
+            Ok(SmsMessage {
+                id: row.get(0)?,
+                from: row.get(1)?,
+                to: row.get(2)?,
+                body: row.get(3)?,
+                received_at: row.get(4)?,
+                read: row.get::<_, i64>(5)? != 0,
+            })
+        })?;
+
+        let mut messages = Vec::new();
+        for row in rows {
+            messages.push(row?);
+        }
+
+        Ok((messages, total))
+    }
+
+    pub fn get_sms(&self, id: &str) -> Result<Option<SmsMessage>> {
+        let conn = self.conn.lock().unwrap();
+        let row: Option<(String, String, String, String, i64)> = conn
+            .query_row(
+                "SELECT from_phone, to_phone, body, received_at, read FROM sms WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .optional()?;
+        Ok(row.map(|(from, to, body, received_at, read)| SmsMessage {
+            id: id.to_string(),
+            from,
+            to,
+            body,
+            received_at,
+            read: read != 0,
+        }))
+    }
+
+    pub fn find_matching_sms(
+        &self,
+        to: Option<&str>,
+        from: Option<&str>,
+        body: Option<&str>,
+        since: Option<&str>,
+    ) -> Result<Option<SmsMessage>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut clauses = Vec::new();
+        let mut values: Vec<String> = Vec::new();
+        if let Some(to) = to {
+            clauses.push("to_phone LIKE ?");
+            values.push(format!("%{to}%"));
+        }
+        if let Some(from) = from {
+            clauses.push("from_phone LIKE ?");
+            values.push(format!("%{from}%"));
+        }
+        if let Some(body) = body {
+            clauses.push("body LIKE ?");
+            values.push(format!("%{body}%"));
+        }
+        if let Some(since) = since {
+            clauses.push("received_at > ?");
+            values.push(since.to_string());
+        }
+
+        let where_clause = if clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", clauses.join(" AND "))
+        };
+        let sql = format!(
+            "SELECT id, from_phone, to_phone, body, received_at, read
+             FROM sms {where_clause} ORDER BY received_at ASC LIMIT 1"
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+        let row = stmt
+            .query_row(params.as_slice(), |row| {
+                Ok(SmsMessage {
+                    id: row.get(0)?,
+                    from: row.get(1)?,
+                    to: row.get(2)?,
+                    body: row.get(3)?,
+                    received_at: row.get(4)?,
+                    read: row.get::<_, i64>(5)? != 0,
+                })
+            })
+            .optional()?;
+
+        Ok(row)
+    }
+
+    pub fn mark_sms_read(&self, id: &str, read: bool) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(
+            "UPDATE sms SET read = ?1 WHERE id = ?2",
+            params![read as i64, id],
+        )?;
+        Ok(n > 0)
+    }
+
+    pub fn mark_sms_read_many(&self, ids: &[String], read: bool) -> Result<usize> {
+        let ids = &ids[..ids.len().min(BULK_LIMIT)];
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock().unwrap();
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!("UPDATE sms SET read = ? WHERE id IN ({placeholders})");
+        let read_i64: i64 = read as i64;
+        let mut params: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(ids.len() + 1);
+        params.push(&read_i64);
+        params.extend(ids.iter().map(|id| id as &dyn rusqlite::ToSql));
+        Ok(conn.execute(&sql, params.as_slice())?)
+    }
+
+    pub fn delete_sms(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute("DELETE FROM sms WHERE id = ?1", params![id])?;
+        Ok(n > 0)
+    }
+
+    pub fn delete_sms_many(&self, ids: &[String]) -> Result<usize> {
+        let ids = &ids[..ids.len().min(BULK_LIMIT)];
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock().unwrap();
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!("DELETE FROM sms WHERE id IN ({placeholders})");
+        let params: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        Ok(conn.execute(&sql, params.as_slice())?)
+    }
+
+    pub fn clear_sms(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM sms", [])?;
+        Ok(())
+    }
 }
+
 
 /// Max ids accepted per bulk operation, regardless of what the client sends.
 const BULK_LIMIT: usize = 1000;

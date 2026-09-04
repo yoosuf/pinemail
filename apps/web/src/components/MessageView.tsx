@@ -72,8 +72,28 @@ export function MessageView() {
   if (error) {
     return <div className="p-6 text-sm text-red-400">Failed to load message: {error}</div>;
   }
-  if (!detail) {
-    return <div className="p-6 text-sm text-zinc-500">Loading…</div>;
+  if (!detail || detail.id !== id) {
+    return (
+      <div className="flex h-full flex-col bg-zinc-950 p-6 space-y-6 animate-pulse">
+        <div className="border-b border-zinc-800/80 pb-4 space-y-3">
+          <div className="h-6 w-72 rounded-md bg-zinc-800" />
+          <div className="space-y-1.5 pt-1">
+            <div className="h-3.5 w-48 rounded bg-zinc-800/60" />
+            <div className="h-3.5 w-40 rounded bg-zinc-800/60" />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <div className="h-8 w-28 rounded-lg bg-zinc-800/80" />
+            <div className="h-8 w-20 rounded-lg bg-zinc-800/60" />
+          </div>
+        </div>
+        <div className="flex gap-4 border-b border-zinc-800/80 pb-2">
+          <div className="h-6 w-16 rounded bg-zinc-800" />
+          <div className="h-6 w-24 rounded bg-zinc-800/60" />
+          <div className="h-6 w-16 rounded bg-zinc-800/60" />
+        </div>
+        <div className="h-96 w-full rounded-xl border border-zinc-800/60 bg-zinc-900/30" />
+      </div>
+    );
   }
 
   async function handleDelete() {

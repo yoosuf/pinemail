@@ -93,7 +93,7 @@ export function MessageList() {
   const sentinelRef = useRef<HTMLLIElement | null>(null);
   useEffect(() => {
     const el = sentinelRef.current;
-    if (!el) return;
+    if (!el || loading || loadingMore || !hasMore) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) void fetchNextPage();
@@ -102,17 +102,46 @@ export function MessageList() {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [fetchNextPage, messages.length]);
+  }, [fetchNextPage, loading, loadingMore, hasMore, messages.length]);
+
+  const openSetupWithSegment = useInboxStore((s) => s.openSetupWithSegment);
+
+  if (loading && messages.length === 0) {
+    return (
+      <div className="space-y-3 p-3">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="animate-pulse space-y-2 rounded-xl border border-zinc-800/60 bg-zinc-900/40 p-3.5"
+          >
+            <div className="flex justify-between">
+              <div className="h-3.5 w-28 rounded bg-zinc-800" />
+              <div className="h-3 w-12 rounded bg-zinc-800/60" />
+            </div>
+            <div className="h-3 w-44 rounded bg-zinc-800/80" />
+            <div className="h-3 w-full rounded bg-zinc-800/50" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   if (messages.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-zinc-600 ring-1 ring-zinc-800">
+      <div className="flex h-full flex-col items-center justify-center p-12 text-center">
+        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-zinc-600 ring-1 ring-zinc-800">
           <InboxIcon width={22} height={22} />
         </div>
-        <p className="text-sm text-zinc-500">
-          {loading ? "Loading…" : "No messages yet — send an email to this catcher to see it here."}
+        <p className="text-sm font-semibold text-zinc-300">No email messages found</p>
+        <p className="mt-1 max-w-xs text-xs leading-relaxed text-zinc-500">
+          Send an email to port <code className="font-mono text-[11px] text-indigo-400">1025</code> or trigger a test email from Setup.
         </p>
+        <button
+          onClick={() => openSetupWithSegment("email")}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-100"
+        >
+          Send test email
+        </button>
       </div>
     );
   }

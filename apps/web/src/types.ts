@@ -82,10 +82,31 @@ export interface ServerConfig {
   http_port: number;
 }
 
+export interface SmsMessage {
+  id: string;
+  from: string;
+  to: string;
+  body: string;
+  received_at: string;
+  read: boolean;
+}
+
+export interface SmsList {
+  messages: SmsMessage[];
+  total: number;
+}
+
 export type ServerEvent =
   | ({ type: "new" } & MessageSummary)
   | { type: "deleted"; id: string }
   | { type: "bulk_deleted"; ids: string[] }
   | { type: "cleared" }
   | { type: "read"; id: string; read: boolean }
-  | { type: "bulk_read"; ids: string[]; read: boolean };
+  | { type: "bulk_read"; ids: string[]; read: boolean }
+  | ({ type: "new_sms" } & SmsMessage)
+  | { type: "sms_deleted"; id: string }
+  | { type: "bulk_sms_deleted"; ids: string[] }
+  | { type: "sms_cleared" }
+  | { type: "sms_read"; id: string; read: boolean }
+  | { type: "bulk_sms_read"; ids: string[]; read: boolean };
+

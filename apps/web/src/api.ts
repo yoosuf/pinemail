@@ -1,4 +1,4 @@
-import type { MessageDetail, MessageList, ExtractedSignals, MessageAnalysis, ServerConfig, MessageSummary } from "./types";
+import type { MessageDetail, MessageList, ExtractedSignals, MessageAnalysis, ServerConfig, MessageSummary, SmsMessage, SmsList } from "./types";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -98,4 +98,71 @@ export const api = {
   attachmentUrl(id: string, index: number): string {
     return `/api/messages/${id}/attachments/${index}`;
   },
+
+  // --- SMS API ---
+
+  listSms(search: string, offset = 0, limit = 50): Promise<SmsList> {
+    const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    if (search) params.set("search", search);
+    return fetch(`/api/sms?${params}`).then((r) => json(r));
+  },
+
+  getSms(id: string): Promise<SmsMessage> {
+    return fetch(`/api/sms/${id}`).then((r) => json(r));
+  },
+
+  extractSms(id: string): Promise<ExtractedSignals> {
+    return fetch(`/api/sms/${id}/extract`).then((r) => json(r));
+  },
+
+  markSmsRead(id: string, read: boolean): Promise<void> {
+    return fetch(`/api/sms/${id}/read`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ read }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    });
+  },
+
+  deleteSms(id: string): Promise<void> {
+    return fetch(`/api/sms/${id}`, { method: "DELETE" }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    });
+  },
+
+  bulkDeleteSms(ids: string[]): Promise<void> {
+    return fetch(`/api/sms/bulk-delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    });
+  },
+
+  bulkMarkSmsRead(ids: string[], read: boolean): Promise<void> {
+    return fetch(`/api/sms/bulk-read`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, read }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    });
+  },
+
+  clearSms(): Promise<void> {
+    return fetch(`/api/sms`, { method: "DELETE" }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    });
+  },
+
+  sendTestSms(to?: string, from?: string, body?: string): Promise<SmsMessage> {
+    return fetch(`/api/test-sms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to, from, body }),
+    }).then((r) => json(r));
+  },
 };
+

@@ -137,6 +137,76 @@ fn tool_definitions() -> Value {
                     "to": { "type": "string", "description": "Recipient address (default: you@example.com)" }
                 }
             }
+        },
+        {
+            "name": "list_sms",
+            "description": "List captured SMS messages, newest first. Optionally filter with a free-text search over sender, recipient, or body.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "search": { "type": "string", "description": "Free-text filter across from/to/body" },
+                    "limit": { "type": "integer", "description": "Max results (default 50)" },
+                    "offset": { "type": "integer", "description": "Pagination offset" }
+                }
+            }
+        },
+        {
+            "name": "get_sms",
+            "description": "Fetch a single SMS message by ID.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "id": { "type": "string" } },
+                "required": ["id"]
+            }
+        },
+        {
+            "name": "wait_for_sms",
+            "description": "Block until a fresh SMS matching the given filters arrives (or timeout). Use this right after triggering an action that sends an SMS OTP/2FA code in an agentic/e2e test.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "to": { "type": "string", "description": "Substring to match against recipient phone/identifier" },
+                    "from": { "type": "string", "description": "Substring to match against sender phone/identifier" },
+                    "body": { "type": "string", "description": "Substring to match against message body" },
+                    "since_ms": { "type": "integer", "description": "Unix epoch ms; only consider SMS received after this. Defaults to now." },
+                    "timeout_ms": { "type": "integer", "description": "How long to wait before giving up (default 10000, max 60000)" }
+                }
+            }
+        },
+        {
+            "name": "extract_sms_signals",
+            "description": "Pull likely OTP/verification codes and links out of an SMS message body.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "id": { "type": "string" } },
+                "required": ["id"]
+            }
+        },
+        {
+            "name": "send_test_sms",
+            "description": "Send a synthetic test SMS message into Pine Mail.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "to": { "type": "string", "description": "Recipient phone number (default: +15550100)" },
+                    "from": { "type": "string", "description": "Sender phone number (default: +18005550199)" },
+                    "body": { "type": "string", "description": "SMS content body" }
+                }
+            }
+        },
+        {
+            "name": "delete_sms",
+            "description": "Delete a single captured SMS message by ID.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "id": { "type": "string" } },
+                "required": ["id"]
+            }
+        },
+        {
+            "name": "clear_sms_inbox",
+            "description": "Delete every captured SMS message.",
+            "inputSchema": { "type": "object", "properties": {} }
         }
     ])
 }
@@ -221,6 +291,82 @@ async fn handle_tool_call(client: &reqwest::Client, request: &Value) -> anyhow::
                 .await?
                 .json::<Value>()
                 .await?
+        }
+        "list_sms" => {
+            let mut url = reqwest::Url::parse(&format!("{base}/api/sms"))?;
+            {
+                let mut qp = url.query_pairs_mut();
+                if let Some(s) = args.get("search").and_then(|v| v.as_str()) {
+                    qp.append_pair("search", s);
+                }
+                if let Some(n) = args.get("limit").and_then(|v| v.as_i64()) {
+                    qp.append_pair("limit", &n.to_string());
+                }
+                if let Some(n) = args.get("offset").and_then(|v| v.as_i64()) {
+                    qp.append_pair("offset", &n.to_string());
+                }
+            }
+            client.get(url).send().await?.json::<Value>().await?
+        }
+        "get_sms" => {
+            let id = require_str(&args, "id")?;
+            client.get(format!("{base}/api/sms/{id}")).send().await?.json::<Value>().await?
+        }
+        "wait_for_sms" => {
+            let mut url = reqwest::Url::parse(&format!("{base}/api/sms/wait"))?;
+            {
+                let mut qp = url.query_pairs_mut();
+                for key in ["to", "from", "body"] {
+                    if let Some(v) = args.get(key).and_then(|v| v.as_str()) {
+                        qp.append_pair(key, v);
+                    }
+                }
+                if let Some(ms) = args.get("since_ms").and_then(|v| v.as_i64()) {
+                    let since = chrono_rfc3339_from_epoch_ms(ms);
+                    qp.append_pair("since", &since);
+                }
+                if let Some(t) = args.get("timeout_ms").and_then(|v| v.as_i64()) {
+                    qp.append_pair("timeout_ms", &t.to_string());
+                }
+            }
+            let timeout_ms = args.get("timeout_ms").and_then(|v| v.as_u64()).unwrap_or(10_000);
+            client
+                .get(url)
+                .timeout(std::time::Duration::from_millis(timeout_ms + 5_000))
+                .send()
+                .await?
+                .json::<Value>()
+                .await?
+        }
+        "extract_sms_signals" => {
+            let id = require_str(&args, "id")?;
+            client
+                .get(format!("{base}/api/sms/{id}/extract"))
+                .send()
+                .await?
+                .json::<Value>()
+                .await?
+        }
+        "send_test_sms" => {
+            let to = args.get("to").and_then(|v| v.as_str());
+            let from = args.get("from").and_then(|v| v.as_str());
+            let body_text = args.get("body").and_then(|v| v.as_str());
+            client
+                .post(format!("{base}/api/test-sms"))
+                .json(&json!({ "to": to, "from": from, "body": body_text }))
+                .send()
+                .await?
+                .json::<Value>()
+                .await?
+        }
+        "delete_sms" => {
+            let id = require_str(&args, "id")?;
+            client.delete(format!("{base}/api/sms/{id}")).send().await?;
+            json!({ "deleted": id })
+        }
+        "clear_sms_inbox" => {
+            client.delete(format!("{base}/api/sms")).send().await?;
+            json!({ "cleared": true })
         }
         other => anyhow::bail!("unknown tool: {other}"),
     };

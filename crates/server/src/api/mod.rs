@@ -1,5 +1,8 @@
+pub mod error;
 pub mod messages;
+pub mod sms;
 pub mod ws;
+
 
 use axum::routing::{get, patch, post};
 use axum::Router;
@@ -55,9 +58,25 @@ pub fn router(state: AppState) -> Router {
         .route("/api/messages/:id/analysis", get(messages::get_analysis))
         .route("/api/wait", get(messages::wait_for_message))
         .route("/api/test-email", post(messages::send_test_email))
+        .route(
+            "/api/sms",
+            get(sms::list_sms).post(sms::ingest_sms).delete(sms::clear_sms),
+        )
+        .route("/api/sms/webhook", post(sms::sms_webhook))
+        .route("/api/sms/bulk-delete", post(sms::bulk_delete_sms))
+        .route("/api/sms/bulk-read", patch(sms::bulk_mark_sms_read))
+        .route(
+            "/api/sms/:id",
+            get(sms::get_sms).delete(sms::delete_sms),
+        )
+        .route("/api/sms/:id/read", patch(sms::mark_sms_read))
+        .route("/api/sms/:id/extract", get(sms::get_sms_extract))
+        .route("/api/sms/wait", get(sms::wait_for_sms))
+        .route("/api/test-sms", post(sms::send_test_sms))
         .route("/api/events", get(ws::ws_handler))
         .route("/api/config", get(get_config))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
+

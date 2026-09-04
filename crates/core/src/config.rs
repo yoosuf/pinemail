@@ -22,7 +22,7 @@ impl Config {
             smtp_port: env_u16("SMTP_PORT", 1025),
             http_port: env_u16("HTTP_PORT", 8025),
             bind_addr: env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0".to_string()),
-            db_path: env::var("DB_PATH").unwrap_or_else(|_| "/data/pinemail.db".to_string()),
+            db_path: env::var("DB_PATH").unwrap_or_else(|_| "pinemail.db".to_string()),
             max_messages: env::var("MAX_MESSAGES")
                 .ok()
                 .and_then(|v| v.parse().ok())

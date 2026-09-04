@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { useInboxStore } from "../store";
 import { btn, card, input } from "../ui";
 import { CheckIcon, CloseIcon, CopyIcon, SendIcon } from "./Icons";
 import type { ServerConfig } from "../types";
 
-function CopyButton({ value }: { value: string }) {
+const CopyButton = memo(function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -13,27 +14,43 @@ function CopyButton({ value }: { value: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}
-      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-zinc-800 px-2 py-1 text-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-100"
+      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/80 px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-100 active:scale-95"
     >
       {copied ? <CheckIcon className="text-emerald-400" /> : <CopyIcon />}
-      {copied ? "Copied" : "Copy"}
+      <span className={copied ? "text-emerald-400" : ""}>{copied ? "Copied" : "Copy"}</span>
     </button>
   );
-}
+});
 
-function ConnectionField({ label, value }: { label: string; value: string }) {
+const ConnectionField = memo(function ConnectionField({
+  label,
+  value,
+  method,
+}: {
+  label: string;
+  value: string;
+  method?: string;
+}) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
-      <div>
-        <div className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</div>
-        <div className="font-mono text-sm text-zinc-100">{value}</div>
+    <div className="group flex items-center justify-between gap-3 rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3 transition-colors hover:border-zinc-700/80 hover:bg-zinc-900/70">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          {method && (
+            <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-400">
+              {method}
+            </span>
+          )}
+          <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">{label}</span>
+        </div>
+        <div className="mt-0.5 truncate font-mono text-xs text-zinc-100 select-all">{value}</div>
       </div>
       <CopyButton value={value} />
     </div>
   );
-}
+});
 
-type Snippet = "node" | "python" | "env";
+type Snippet = "node" | "python" | "env" | "curl";
+type SmsSnippet = "json" | "twilio" | "python" | "node";
 
 function snippetFor(kind: Snippet, host: string, port: number): string {
   switch (kind) {
@@ -69,6 +86,58 @@ SMTP_PORT=${port}
 SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASSWORD=`;
+    case "curl":
+      return `curl --url 'smtp://${host}:${port}' \\
+  --mail-from 'you@yourapp.dev' \\
+  --mail-rcpt 'user@example.com' \\
+  --upload-file - <<EOF
+From: you@yourapp.dev
+To: user@example.com
+Subject: Test Email
+
+Hello from Pine Mail cURL!
+EOF`;
+  }
+}
+
+function smsSnippetFor(kind: SmsSnippet, host: string): string {
+  switch (kind) {
+    case "json":
+      return `curl -X POST http://${host}:8025/api/sms \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "from": "+18005550199",
+    "to": "+15550100",
+    "body": "Your verification code is 849201"
+  }'`;
+    case "twilio":
+      return `curl -X POST http://${host}:8025/api/sms/webhook \\
+  -H "Content-Type: application/x-www-form-urlencoded" \\
+  --data-urlencode "From=+18005550199" \\
+  --data-urlencode "To=+15550100" \\
+  --data-urlencode "Body=Your verification code is 849201"`;
+    case "python":
+      return `import requests
+
+response = requests.post(
+    "http://${host}:8025/api/sms",
+    json={
+        "from": "+18005550199",
+        "to": "+15550100",
+        "body": "Your verification code is 849201"
+    }
+)
+print(response.json())`;
+    case "node":
+      return `await fetch("http://${host}:8025/api/sms", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    from: "+18005550199",
+    to: "+15550100",
+    body: "Your verification code is 849201",
+  }),
+});`;
   }
 }
 
@@ -76,116 +145,293 @@ const SNIPPET_TABS: [Snippet, string][] = [
   ["node", "Node.js"],
   ["python", "Python"],
   ["env", ".env"],
+  ["curl", "cURL"],
 ];
 
-export function SetupPanel({ onClose }: { onClose: () => void }) {
+const SMS_SNIPPET_TABS: [SmsSnippet, string][] = [
+  ["json", "cURL (JSON)"],
+  ["twilio", "cURL (Twilio)"],
+  ["python", "Python"],
+  ["node", "Node.js"],
+];
+
+export const SetupPanel = memo(function SetupPanel({ onClose }: { onClose?: () => void }) {
+  const setupOpen = useInboxStore((s) => s.setupOpen);
+  const setSetupOpen = useInboxStore((s) => s.setSetupOpen);
+  const activeSegment = useInboxStore((s) => s.setupSegment);
+  const setActiveSegment = useInboxStore((s) => s.setSetupSegment);
+
+  const handleClose = () => {
+    setSetupOpen(false);
+    onClose?.();
+  };
+
   const [config, setConfig] = useState<ServerConfig | null>(null);
   const [snippet, setSnippet] = useState<Snippet>("node");
+  const [smsSnippet, setSmsSnippet] = useState<SmsSnippet>("json");
+
   const [testTo, setTestTo] = useState("");
   const [sendState, setSendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
-  useEffect(() => {
-    api.config().then(setConfig).catch(() => {});
-  }, []);
+  const [smsTestTo, setSmsTestTo] = useState("");
+  const [smsSendState, setSmsSendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
-  const host = window.location.hostname;
+  useEffect(() => {
+    if (!setupOpen) return;
+    api.config().then(setConfig).catch(() => {});
+  }, [setupOpen]);
+
+  const host = window.location.hostname || "localhost";
   const port = config?.smtp_port ?? 1025;
+
+  const currentEmailSnippet = useMemo(() => snippetFor(snippet, host, port), [snippet, host, port]);
+  const currentSmsSnippet = useMemo(() => smsSnippetFor(smsSnippet, host), [smsSnippet, host]);
 
   async function handleSendTest() {
     setSendState("sending");
     try {
       await api.sendTestEmail(testTo);
       setSendState("sent");
-      setTimeout(() => setSendState("idle"), 2000);
+      setTimeout(() => setSendState("idle"), 2500);
     } catch {
       setSendState("error");
     }
   }
 
+  async function handleSendSmsTest() {
+    setSmsSendState("sending");
+    try {
+      await api.sendTestSms(smsTestTo || undefined);
+      setSmsSendState("sent");
+      setTimeout(() => setSmsSendState("idle"), 2500);
+    } catch {
+      setSmsSendState("error");
+    }
+  }
+
+  if (!setupOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-md transition-opacity animate-in fade-in duration-200"
+      onClick={handleClose}
+    >
       <div
-        className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-zinc-800 bg-zinc-950 shadow-2xl"
+        className="flex h-full w-full max-w-lg flex-col overflow-y-auto border-l border-zinc-800/80 bg-zinc-950/95 shadow-2xl backdrop-blur-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
-          <h2 className="text-sm font-semibold tracking-tight text-zinc-100">Connect your app</h2>
-          <button onClick={onClose} className={btn.ghost} aria-label="Close">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-zinc-800/80 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-semibold tracking-tight text-zinc-100">Connect your app</h2>
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+              </span>
+              Connected
+            </div>
+          </div>
+          <button
+            onClick={handleClose}
+            className={`${btn.ghost} rounded-full p-1.5 hover:bg-zinc-800`}
+            aria-label="Close setup panel"
+          >
             <CloseIcon />
           </button>
         </div>
 
-        <div className="flex-1 space-y-6 p-5">
-          <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              SMTP connection
-            </h3>
-            <div className="space-y-2">
-              <ConnectionField label="Host" value={host} />
-              <ConnectionField label="Port" value={String(port)} />
-              <ConnectionField label="Auth" value="none required" />
-            </div>
-          </section>
-
-          <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Point your mailer here
-            </h3>
-            <div className={card}>
-              <div className="flex gap-1 border-b border-zinc-800 px-2 pt-2">
-                {SNIPPET_TABS.map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setSnippet(key)}
-                    className={`rounded-t-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                      snippet === key
-                        ? "border-b-2 border-indigo-500 text-zinc-100"
-                        : "text-zinc-500 hover:text-zinc-300"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <div className="ml-auto pb-1 pr-1">
-                  <CopyButton value={snippetFor(snippet, host, port)} />
-                </div>
-              </div>
-              <pre className="overflow-x-auto p-3 font-mono text-[11px] leading-relaxed text-zinc-300">
-                {snippetFor(snippet, host, port)}
-              </pre>
-            </div>
-          </section>
-
-          <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Send a test email
-            </h3>
-            <p className="mb-2 text-xs text-zinc-500">
-              Verify Pine Mail is receiving mail without leaving the browser.
-            </p>
-            <div className="flex gap-2">
-              <input
-                value={testTo}
-                onChange={(e) => setTestTo(e.target.value)}
-                placeholder="you@example.com (optional)"
-                className={input}
-              />
-              <button
-                onClick={handleSendTest}
-                disabled={sendState === "sending"}
-                className={`${btn.primary} shrink-0`}
-              >
-                <SendIcon />
-                {sendState === "sending" ? "Sending…" : sendState === "sent" ? "Sent!" : "Send"}
-              </button>
-            </div>
-            {sendState === "error" && (
-              <p className="mt-2 text-xs text-red-400">Failed to send test email.</p>
-            )}
-          </section>
+        {/* Segmented Navigation Control */}
+        <div className="px-6 pt-5">
+          <div className="flex rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-1 shadow-inner">
+            <button
+              onClick={() => setActiveSegment("email")}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-all duration-150 ${
+                activeSegment === "email"
+                  ? "border border-indigo-500/30 bg-zinc-800 text-zinc-100 shadow-md shadow-indigo-950/40"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <span className="text-sm">✉️</span>
+              <span>Email (SMTP)</span>
+            </button>
+            <button
+              onClick={() => setActiveSegment("sms")}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-all duration-150 ${
+                activeSegment === "sms"
+                  ? "border border-emerald-500/30 bg-zinc-800 text-zinc-100 shadow-md shadow-emerald-950/40"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <span className="text-sm">💬</span>
+              <span>SMS API & Webhooks</span>
+            </button>
+          </div>
         </div>
 
-        <footer className="border-t border-zinc-800 px-5 py-4 text-xs text-zinc-500">
+        {/* Panel Content */}
+        <div className="flex-1 space-y-6 p-6">
+          {activeSegment === "email" ? (
+            <>
+              {/* SMTP Connection details */}
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                    SMTP Server Configuration
+                  </h3>
+                  <span className="text-[11px] text-zinc-500">No TLS / No Auth</span>
+                </div>
+                <div className="grid gap-2">
+                  <ConnectionField label="Host" value={host} />
+                  <ConnectionField label="SMTP Port" value={String(port)} />
+                  <ConnectionField label="Authentication" value="None (dev environment)" />
+                </div>
+              </section>
+
+              {/* Mailer Code Snippets */}
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  Integration Code Examples
+                </h3>
+                <div className={card}>
+                  <div className="flex items-center gap-1 border-b border-zinc-800/80 bg-zinc-900/60 px-3 pt-2">
+                    {SNIPPET_TABS.map(([key, label]) => (
+                      <button
+                        key={key}
+                        onClick={() => setSnippet(key)}
+                        className={`rounded-t-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                          snippet === key
+                            ? "border-b-2 border-indigo-500 bg-zinc-800/50 text-zinc-100"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <div className="ml-auto pb-1">
+                      <CopyButton value={currentEmailSnippet} />
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <pre className="overflow-x-auto p-4 font-mono text-[11px] leading-relaxed text-zinc-300">
+                      {currentEmailSnippet}
+                    </pre>
+                  </div>
+                </div>
+              </section>
+
+              {/* Send Test Email */}
+              <section className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-4 space-y-3">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                    Deliver Test Email
+                  </h3>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Instantly deliver a test MIME email to verify Pine Mail SMTP interception.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={testTo}
+                    onChange={(e) => setTestTo(e.target.value)}
+                    placeholder="you@example.com (optional)"
+                    className={input}
+                  />
+                  <button
+                    onClick={handleSendTest}
+                    disabled={sendState === "sending"}
+                    className={`${btn.primary} shrink-0 px-4`}
+                  >
+                    <SendIcon />
+                    {sendState === "sending" ? "Sending…" : sendState === "sent" ? "Sent! ✅" : "Send Email"}
+                  </button>
+                </div>
+                {sendState === "error" && (
+                  <p className="text-xs text-red-400">Failed to deliver test email. Check server log.</p>
+                )}
+              </section>
+            </>
+          ) : (
+            <>
+              {/* SMS Endpoints */}
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  SMS API & Webhook Endpoints
+                </h3>
+                <div className="grid gap-2">
+                  <ConnectionField method="POST" label="REST Ingest API" value={`http://${host}:8025/api/sms`} />
+                  <ConnectionField method="POST" label="Twilio Webhook URL" value={`http://${host}:8025/api/sms/webhook`} />
+                </div>
+              </section>
+
+              {/* SMS Code Snippets */}
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  SMS Integration Snippets
+                </h3>
+                <div className={card}>
+                  <div className="flex items-center gap-1 border-b border-zinc-800/80 bg-zinc-900/60 px-3 pt-2">
+                    {SMS_SNIPPET_TABS.map(([key, label]) => (
+                      <button
+                        key={key}
+                        onClick={() => setSmsSnippet(key)}
+                        className={`rounded-t-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                          smsSnippet === key
+                            ? "border-b-2 border-emerald-500 bg-zinc-800/50 text-zinc-100"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <div className="ml-auto pb-1">
+                      <CopyButton value={currentSmsSnippet} />
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <pre className="overflow-x-auto p-4 font-mono text-[11px] leading-relaxed text-zinc-300">
+                      {currentSmsSnippet}
+                    </pre>
+                  </div>
+                </div>
+              </section>
+
+              {/* Send Test SMS */}
+              <section className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-4 space-y-3">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                    Deliver Test SMS
+                  </h3>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Synthesize and inject a verification SMS directly into your Pine Mail SMS inbox.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={smsTestTo}
+                    onChange={(e) => setSmsTestTo(e.target.value)}
+                    placeholder="+15550100 (optional)"
+                    className={input}
+                  />
+                  <button
+                    onClick={handleSendSmsTest}
+                    disabled={smsSendState === "sending"}
+                    className={`${btn.primary} shrink-0 px-4 !bg-emerald-600 hover:!bg-emerald-500`}
+                  >
+                    <SendIcon />
+                    {smsSendState === "sending" ? "Sending…" : smsSendState === "sent" ? "Sent! ✅" : "Send SMS"}
+                  </button>
+                </div>
+                {smsSendState === "error" && (
+                  <p className="text-xs text-red-400">Failed to deliver test SMS. Check server log.</p>
+                )}
+              </section>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <footer className="border-t border-zinc-800/80 px-6 py-4 text-xs text-zinc-500">
           Built by{" "}
           <a
             href="https://yoosuf.me/"
@@ -209,4 +455,6 @@ export function SetupPanel({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
-}
+});
+
+

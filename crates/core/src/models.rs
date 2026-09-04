@@ -56,6 +56,33 @@ pub struct MarkReadBody {
     pub read: bool,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct BulkIdsBody {
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkReadBody {
+    pub ids: Vec<String>,
+    pub read: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmsMessage {
+    pub id: String,
+    pub from: String,
+    pub to: String,
+    pub body: String,
+    pub received_at: String,
+    pub read: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SmsList {
+    pub messages: Vec<SmsMessage>,
+    pub total: i64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
@@ -65,4 +92,11 @@ pub enum Event {
     Cleared,
     Read { id: String, read: bool },
     BulkRead { ids: Vec<String>, read: bool },
+    NewSms(SmsMessage),
+    SmsDeleted { id: String },
+    BulkSmsDeleted { ids: Vec<String> },
+    SmsCleared,
+    SmsRead { id: String, read: bool },
+    BulkSmsRead { ids: Vec<String>, read: bool },
 }
+

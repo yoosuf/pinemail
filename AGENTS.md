@@ -67,22 +67,24 @@ catcher. Two ways in:
 - `GET /api/messages/:id/extract` — returns `{ codes: string[], links: string[] }`
   pulled out of the body via regex (4-8 digit runs for OTPs, `https?://…` for magic
   links). Saves agents from writing their own extraction regex.
-- Everything else under `/api/messages` (list/get/delete/clear/mark-read) works as a
-  normal REST resource — see `crates/server/src/api/messages.rs` for the full set.
+- `GET /api/sms/wait?to=&from=&body=&since=&timeout_ms=` — **long-polls** until a matching SMS arrives.
+- `POST /api/sms` & `POST /api/sms/webhook` — ingest incoming SMS messages (supports standard JSON or Twilio webhooks).
+- `GET /api/sms/:id/extract` — returns `{ codes: string[], links: string[] }` pulled out of the SMS body via regex.
+- Everything else under `/api/messages` and `/api/sms` (list/get/delete/clear/mark-read) works as a normal REST resource.
 
 Typical agent flow:
 ```
 1. capture `since = now()` BEFORE triggering anything (see gotcha below)
-2. trigger the app action that should send an email (e.g. POST /signup)
-3. GET /api/wait?to=<the test user's address>&subject=Verify&since=<step 1>&timeout_ms=15000
-4. GET /api/messages/{id}/extract  -> grab codes[0] or links[0]
+2. trigger the app action that should send an email/SMS (e.g. POST /signup or POST /send-otp)
+3. GET /api/wait (for email) or GET /api/sms/wait (for SMS) with since=<step 1>
+4. GET /api/messages/{id}/extract or GET /api/sms/{id}/extract -> grab codes[0] or links[0]
 5. use that code/link to complete the flow
-6. DELETE /api/messages/{id} (optional cleanup)
+6. DELETE /api/messages/{id} or DELETE /api/sms/{id} (optional cleanup)
 ```
 
-> **Gotcha:** `since` defaults to "now" *at the moment `/api/wait` is called*, not
+> **Gotcha:** `since` defaults to "now" *at the moment `/api/wait` or `/api/sms/wait` is called*, not
 > when you started the flow. If you trigger the action first and only call
-> `/api/wait` afterwards, the email can already exist with a `received_at` before
+> `/api/wait` afterwards, the email/SMS can already exist with a `received_at` before
 > that default `since` and get silently filtered out (this bit us in
 > `examples/mcp_e2e_demo.py` during testing). Always capture the timestamp
 > before triggering the action and pass it explicitly as `since`/`since_ms`.
@@ -91,8 +93,9 @@ Typical agent flow:
 
 For MCP-aware agents (Claude Desktop, Copilot, Cursor, etc.), point the client at the
 `pinemail-mcp` binary (stdio transport) with `PINEMAIL_URL` set to the running
-server. It exposes the same capability as MCP tools: `list_emails`, `get_email`,
-`wait_for_email`, `extract_signals`, `delete_email`, `clear_inbox`, `send_test_email`.
+server. It exposes the same capability as MCP tools:
+- Email tools: `list_emails`, `get_email`, `wait_for_email`, `extract_signals`, `delete_email`, `clear_inbox`, `send_test_email`.
+- SMS tools: `list_sms`, `get_sms`, `wait_for_sms`, `extract_sms_signals`, `delete_sms`, `clear_sms_inbox`, `send_test_sms`.
 See `crates/mcp/src/main.rs` for the tool schemas — it's a hand-rolled JSON-RPC/MCP
 server (no SDK dependency) so the schemas there are the source of truth.
 
@@ -114,3 +117,4 @@ Example client config:
   }
 }
 ```
+

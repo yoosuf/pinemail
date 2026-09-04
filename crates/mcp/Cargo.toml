@@ -3,9 +3,9 @@ name = "pinemail-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "MCP (Model Context Protocol) server connecting AI agents to Pine Mail's inbox — enables Claude, Copilot, and Cursor to discover, wait for, and extract data from captured emails"
+description = "MCP (Model Context Protocol) server connecting AI agents to Pine Mail — enables Claude, Copilot, and Cursor to discover, wait for, and extract data from captured emails and SMS"
 repository = "https://github.com/yoosuf/pinemail"
-keywords = ["mcp", "mail", "agents", "ai", "testing"]
+keywords = ["mcp", "mail", "sms", "agents", "ai", "testing"]
 
 [[bin]]
 name = "pinemail-mcp"

@@ -3,9 +3,9 @@ name = "pinemail-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "SMTP mail server (port 1025) + REST API + Web UI (port 8025) for Pine Mail — a tiny, single-binary mail catcher for development, testing, and agentic email workflows"
+description = "SMTP mail server (port 1025) + SMS API & Twilio Webhooks + REST API + Web UI (port 8025) for Pine Mail — a tiny, single-binary email & SMS catcher for development, testing, and agentic workflows"
 repository = "https://github.com/yoosuf/pinemail"
-keywords = ["mail", "smtp", "mail-catcher", "testing", "agents"]
+keywords = ["mail", "smtp", "sms", "mail-catcher", "sms-catcher", "testing", "agents"]
 
 [[bin]]
 name = "pinemail"
